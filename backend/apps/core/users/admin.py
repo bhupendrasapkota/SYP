@@ -1,10 +1,7 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
-from django.contrib.auth.models import Group
 from .models import User
 
-# Unregister Group (if not needed)
-admin.site.unregister(Group)
 
 class UserAdmin(BaseUserAdmin):
     """Manages both user authentication and profile fields in the admin panel."""

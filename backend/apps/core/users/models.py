@@ -31,7 +31,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     about = models.TextField(blank=True, null=True)
     contact = models.JSONField(blank=True, null=True)
     followers_count = models.BigIntegerField(default=0)
-    following_count = models.BigIntegerField(default=0)
+    following_count = models.IntegerField(default=0)
 
 
     last_login = models.DateTimeField(blank=True, null=True)
