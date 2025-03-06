@@ -6,7 +6,7 @@ from .models import User
 class UserAdmin(BaseUserAdmin):
     """Manages both user authentication and profile fields in the admin panel."""
     
-    list_display = ('username', 'email', 'full_name', 'followers_count', 'is_admin', 'is_staff', 'is_active')
+    list_display = ('username', 'email', 'full_name', 'followers_count','following_count', 'is_admin', 'is_staff', 'is_active')
     list_filter = ('is_admin', 'is_staff', 'is_active')
 
     fieldsets = (
