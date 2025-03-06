@@ -1,6 +1,8 @@
 from django.db import models
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
 import uuid
+from cloudinary.models import CloudinaryField
+from PIL import Image
 
 class UserManager(BaseUserManager):
     def create_user(self, username, email, password=None, **extra_fields):
@@ -25,7 +27,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     password = models.CharField(max_length=255)
     full_name = models.CharField(max_length=100, blank=True, null=True)
     bio = models.TextField(blank=True, null=True)
-    profile_picture = models.CharField(max_length=255, blank=True, null=True)
+    profile_picture = CloudinaryField('image',folder="profile_pictures/" ,blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     about = models.TextField(blank=True, null=True)
