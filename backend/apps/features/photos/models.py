@@ -4,7 +4,8 @@ from io import BytesIO
 from PIL import Image as PILImage
 from django.db import models
 from cloudinary.models import CloudinaryField
-from apps.features.photos.aitag import generate_ai_tags
+from . import signals
+from django.core.cache import cache
 
 class Photo(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -35,13 +36,14 @@ class Photo(models.Model):
             except Exception as e:
                 print(f"Failed to extract image metadata: {e}")
                 self.width, self.height, self.format = None, None, None
+
+        cache.delete(f"photo:{self.id}")
+        cache.delete("trending_photos")
         super().save(*args, **kwargs)
         
-        try:
-            self.ai_tags = generate_ai_tags(self)
-            super().save(update_fields=["ai_tags"])
-        except Exception as e:
-            print(f"AI Tagging failed: {e}")
+    def generate_ai_tags(self):
+        return signals.generate_ai_tags(self)
+
         
 
     def __str__(self):

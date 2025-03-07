@@ -7,10 +7,10 @@ from transformers import BlipProcessor, BlipForConditionalGeneration
 processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
 model = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base")
 
-def generate_ai_tags(self):
+def generate_ai_tags(photo):
     """Generate AI tags using Google Cloud Vision API."""
     try:
-        response = requests.get(self.image, stream=True)
+        response = requests.get(photo.image, stream=True)
         image = PILImage.open(BytesIO(response.content)).convert("RGB")  
                   
         input = processor(image, return_tensors="pt")

@@ -1,4 +1,3 @@
-from apps.features.photos.models import models
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -14,10 +13,19 @@ from django.core.cache import cache
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter
 
+def validate_and_upload_image(image_file, username):
+    """Validate image type and upload to Cloudinary."""
+    if not validate_image(image_file):
+        print("Invalid image format.")
+        return None
+    
+    upload_result = upload(image_file, folder=f"users/Photos/{username}")
+    return upload_result.get("secure_url")
+
+
 class PhotoUploadView(APIView):
     """Handles user photo uploads."""
-    permission_classes = [IsAuthenticated]
-
+    permission_classes = [IsAuthenticated]   
     def post(self, request):
         user = request.user
         image_files = request.FILES.getlist("image")
@@ -30,24 +38,18 @@ class PhotoUploadView(APIView):
             if not validate_image(image_file):
                 continue
             
-            try:
-                upload_result = upload(image_file, folder=f"users/Photos/{user.username}")
+            image_url = validate_and_upload_image(image_file, user.username)
+            if image_url:
                 photo = Photo.objects.create(
-                user = user,
-                image = upload_result["secure_url"],
-                title = request.data.get("title", ""),
-                description = request.data.get("description", ""),
+                    user=user,
+                    image=image_url,
+                    title=request.data.get("title", ""),
+                    description=request.data.get("description", ""),
                 )
                 uploaded_photos.append(PhotoSerializer(photo).data)
-            except Exception as e:
-                continue
 
-        photo = Photo.objects.create(
-            user=user,
-            image=upload_result["secure_url"],
-            title=request.data.get("title", ""),
-            description=request.data.get("description", ""),
-        )
+
+            
         try:
             ai_tags = photo.generate_ai_tags() or []
             photo.ai_tags = ai_tags
