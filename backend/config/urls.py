@@ -6,4 +6,5 @@ urlpatterns = [
     path('api/auth/', include('apps.core.authentication.urls')),
     path('api/users/', include('apps.core.users.urls')),
     path("api/photos/", include("apps.features.photos.urls")),
+    path("api/collections/", include("apps.features.collection.urls")),
 ]
