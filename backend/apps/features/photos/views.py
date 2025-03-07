@@ -20,27 +20,27 @@ class PhotoUploadView(APIView):
 
     def post(self, request):
         user = request.user
-        image_file = request.FILES.get("image")
-
-        if not image_file:
-            return Response({"error": "No image uploaded"}, status=status.HTTP_400_BAD_REQUEST)
-
-        if not validate_image(image_file):
-            return Response({"error": "Invalid image format. Allowed: JPG, PNG, GIF, WEBP"}, status=status.HTTP_400_BAD_REQUEST)
-
-        try:
-            timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-            upload_result = upload(
-                image_file,
-                folder=f"Users/Photos/{user.username}/",
-                public_id=f"{user.username}_{timestamp}",
-                overwrite=False,
-                invalidate=True,
-                resource_type="auto",
-                transformation=[{"width": 1200, "quality": "auto"}]
-            )
-        except Exception as e:
-            return Response({"error": "Image upload failed. Please try again."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        image_files = request.FILES.getlist("image")
+        
+        if not image_files:
+            return Response({"error": "Image is not uploaded."}, status=status.HTTP_400_BAD_REQUEST)
+        
+        uploaded_photos = []
+        for image_file in image_files:
+            if not validate_image(image_file):
+                continue
+            
+            try:
+                upload_result = upload(image_file, folder=f"users/Photos/{user.username}")
+                photo = Photo.objects.create(
+                user = user,
+                image = upload_result["secure_url"],
+                title = request.data.get("title", ""),
+                description = request.data.get("description", ""),
+                )
+                uploaded_photos.append(PhotoSerializer(photo).data)
+            except Exception as e:
+                continue
 
         photo = Photo.objects.create(
             user=user,
@@ -58,7 +58,7 @@ class PhotoUploadView(APIView):
         return Response(
             {
                 "message": "Photo uploaded successfully",
-                "photo": PhotoSerializer(photo).data,
+                "photo": uploaded_photos,
             },
             status=status.HTTP_201_CREATED,
         )
@@ -91,14 +91,23 @@ class TrendingPhotoPagination(PageNumberPagination):
 class TrendingPhotosView(ListAPIView):
     """Fetch trending photos based on most likes"""
     permission_classes = [IsAuthenticated]
-    queryset = (
-        Photo.objects
-        .select_related("user")
-        .only("user__username", "image", "title", "upload_date", "likes_count", "comments_count")
-        .order_by("-likes_count", "-upload_date")
-    )
     serializer_class = PhotoSerializer
     pagination_class = TrendingPhotoPagination
+    
+    def get_queryset(self):
+        cache_key = "trending_photos"
+        trending_photos = cache.get(cache_key)
+        
+        if not trending_photos:
+            trending_photos = (
+                Photo.objects
+                .select_related("user")
+                .only("user__username", "image", "title", "upload_date", "likes_count", "comments_count")
+                .order_by("-likes_count","-upload_date")[:10]
+            )
+            cache.set(cache_key, trending_photos, timeout=3600)
+        
+        return trending_photos
 
 
 class RetrievePhotoView(RetrieveAPIView):
