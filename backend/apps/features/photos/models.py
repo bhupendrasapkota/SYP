@@ -1,11 +1,10 @@
 import uuid
-from django.db import models
-from django.db.models import JSONField
-from cloudinary.models import CloudinaryField
-from cloudinary.uploader import upload
-from PIL import Image
 import requests
 from io import BytesIO
+from PIL import Image as PILImage
+from django.db import models
+from cloudinary.models import CloudinaryField
+from apps.features.photos.aitag import generate_ai_tags
 
 class Photo(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -16,7 +15,7 @@ class Photo(models.Model):
     width = models.IntegerField(null=True, blank=True)
     height = models.IntegerField(null=True, blank=True)
     format = models.CharField(max_length=20, null=True, blank=True)
-    ai_tags = models.JSONField(blank=True, null=True)
+    ai_tags = models.JSONField(default=list, blank=True)
     upload_date = models.DateTimeField(auto_now_add=True)
     likes_count = models.IntegerField(default=0)
     comments_count = models.IntegerField(default=0)
@@ -27,13 +26,23 @@ class Photo(models.Model):
     def save(self, *args, **kwargs):
         """Auto-extract image metadata before saving."""
         if not self.width or not self.height or not self.format:
-            response = requests.get(self.image, stream=True)
-            if response.status_code == 200:
-                img = Image.open(BytesIO(response.content))
-                self.width, self.height = img.size
-                self.format = img.format.lower()
-
+            try:
+                response = requests.get(self.image, stream=True)
+                if response.status_code == 200:
+                    img = PILImage.open(BytesIO(response.content))
+                    self.width, self.height = img.size
+                    self.format = img.format.lower()
+            except Exception as e:
+                print(f"Failed to extract image metadata: {e}")
+                self.width, self.height, self.format = None, None, None
         super().save(*args, **kwargs)
+        
+        try:
+            self.ai_tags = generate_ai_tags(self)
+            super().save(update_fields=["ai_tags"])
+        except Exception as e:
+            print(f"AI Tagging failed: {e}")
+        
 
     def __str__(self):
         return f"Photo by {self.user.username} - {self.title if self.title else 'Untitled'}"
