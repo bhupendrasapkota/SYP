@@ -51,6 +51,8 @@ INSTALLED_APPS = [
     'apps.features.comments',
     'apps.features.downloads',
     'apps.features.collection',
+    
+    "django_filters",
 ]
 
 
@@ -127,7 +129,15 @@ AUTH_USER_MODEL = 'users.User'
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "rest_framework_simplejwt.authentication.JWTAuthentication",
-    )
+    ),
+    "DEFAULT_THROTTLE_CLASSES": (
+        "rest_framework.throttling.UserRateThrottle",
+        "rest_framework.throttling.AnonRateThrottle",
+    ),
+    "DEFAULT_THROTTLE_RATES": {
+        "user": "100/day",
+        "anon": "10/minute",
+    },
 }
 
 SIMPLE_JWT = {

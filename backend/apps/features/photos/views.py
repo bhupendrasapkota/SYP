@@ -1,3 +1,4 @@
+from apps.features.photos.models import models
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -6,9 +7,12 @@ from cloudinary.uploader import upload
 from apps.features.photos.models import Photo
 from .serializers import PhotoSerializer
 from apps.core.users.security import validate_image
-from rest_framework.generics import ListAPIView
+from rest_framework.generics import ListAPIView, RetrieveAPIView
 from rest_framework.pagination import PageNumberPagination
 from datetime import datetime
+from django.core.cache import cache
+from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework.filters import SearchFilter
 
 class PhotoUploadView(APIView):
     """Handles user photo uploads."""
@@ -75,6 +79,9 @@ class PhotoListView(ListAPIView):
     )
     serializer_class = PhotoSerializer
     pagination_class = PhotoPagination
+    filter_backends = [DjangoFilterBackend, SearchFilter]
+    filterset_fields = ["user__username","upload_date"]
+    search_fields = ["title","description"]
     
 class TrendingPhotoPagination(PageNumberPagination):
     page_size = 10
@@ -92,3 +99,26 @@ class TrendingPhotosView(ListAPIView):
     )
     serializer_class = PhotoSerializer
     pagination_class = TrendingPhotoPagination
+
+
+class RetrievePhotoView(RetrieveAPIView):
+    """Retrieve a single photo by ID."""
+    permission_classes = [IsAuthenticated]
+    queryset = Photo.objects.select_related("user").defer("user__password","user__email").only(
+        "user__username", "image", "title", "description", "upload_date", "likes_count", "comments_count"
+    )
+    serializer_class = PhotoSerializer
+    
+    def get_object(self):
+        
+        photo_id = self.kwargs.get("pk") 
+        cached_photo = cache.get(f"photo_{photo_id}")      
+        if cached_photo:
+            return cached_photo
+        try:
+            photo = super().get_object()
+        except Photo.DoesNotExist:
+            return Response({"error": "Photo not found"}, status=status.HTTP_404_NOT_FOUND)
+        
+        cache.set(f"photo_{photo_id}", photo, timeout=3600)
+        return photo
