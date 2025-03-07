@@ -19,7 +19,11 @@ def validate_and_upload_image(image_file, username):
         print("Invalid image format.")
         return None
     
-    upload_result = upload(image_file, folder=f"users/Photos/{username}")
+    upload_result = upload(
+        image_file,
+        folder=f"users/Photos/{username}",
+        public_id=f"{username}_{datetime.now().strftime('%Y%m%d%H%M%S')}"
+    )  
     return upload_result.get("secure_url")
 
 
@@ -34,10 +38,7 @@ class PhotoUploadView(APIView):
             return Response({"error": "Image is not uploaded."}, status=status.HTTP_400_BAD_REQUEST)
         
         uploaded_photos = []
-        for image_file in image_files:
-            if not validate_image(image_file):
-                continue
-            
+        for image_file in image_files:         
             image_url = validate_and_upload_image(image_file, user.username)
             if image_url:
                 photo = Photo.objects.create(
