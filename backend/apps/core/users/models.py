@@ -49,6 +49,11 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     class Meta:
         db_table = "users"
+             
+    def save(self, *args, **kwargs):
+        if self.password and not self.password.startswith("pbkdf2_sha256"):
+            self.set_password(self.password)
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return self.username

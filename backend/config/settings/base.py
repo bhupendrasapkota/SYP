@@ -48,9 +48,11 @@ INSTALLED_APPS = [
     'apps.core.authentication',
     'apps.features.photos',
     'apps.features.likes',
+    'apps.features.followers',
     'apps.features.comments',
     'apps.features.downloads',
     'apps.features.collection',
+    'apps.features.categories',
     
     "django_filters",
 ]
@@ -138,6 +140,7 @@ REST_FRAMEWORK = {
         "user": "100/day",
         "anon": "10/minute",
     },
+    "EXCEPTION_HANDLER": "config.error_handlers.custom_exception_handler",
 }
 
 SIMPLE_JWT = {
