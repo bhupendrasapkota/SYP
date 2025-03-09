@@ -20,6 +20,7 @@ class Photo(models.Model):
     upload_date = models.DateTimeField(auto_now_add=True)
     likes_count = models.IntegerField(default=0)
     comments_count = models.IntegerField(default=0)
+    downloads_count = models.IntegerField(default=0)
 
     class Meta:
         db_table = "photos"

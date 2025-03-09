@@ -3,12 +3,12 @@ from .models import Photo
 
 class PhotoAdmin(admin.ModelAdmin):
     """Admin configuration for the Photo model."""
-    list_display = ("title", "user", "upload_date", "likes_count", "comments_count", "format", "get_size")
+    list_display = ("title", "user", "upload_date", "likes_count", "comments_count", "format", "get_size", "downloads_count")
     list_filter = ("upload_date", "format", "user")
     search_fields = ("title", "user__username", "description", "ai_tags")
     ordering = ("-upload_date",)
 
-    readonly_fields = ("width", "height", "format", "upload_date", "likes_count", "comments_count")
+    readonly_fields = ("width", "height", "format", "upload_date", "likes_count", "comments_count", "downloads_count")
 
     
     def get_size(self, obj):
