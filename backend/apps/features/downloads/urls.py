@@ -1,7 +1,11 @@
-from django.urls import path
-from .views import DownloadPhotoView, DownloadListView
+from django.urls import path, include
+from rest_framework.routers import DefaultRouter
+from .views import DownloadViewSet
+
+app_name = "downloads"
+router = DefaultRouter()
+router.register(r'', DownloadViewSet, basename='downloads')
 
 urlpatterns = [
-    path("photos/<uuid:photo_id>/download/", DownloadPhotoView.as_view(), name="download-photo"),
-    path("my-downloads/", DownloadListView.as_view(), name="download-list"),
+    path("", include(router.urls)),
 ]

@@ -1,36 +1,28 @@
-from rest_framework import generics, status
-from rest_framework.response import Response
+from rest_framework import viewsets, status
 from rest_framework.permissions import IsAuthenticated
-from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework.decorators import action
+from django.shortcuts import get_object_or_404
 from .models import Like
 from .serializers import LikeSerializer
 
-class LikePhotoView(generics.CreateAPIView):
+class LikeViewSet(viewsets.ModelViewSet):
+    """Handles CRUD operations for likes"""
+    queryset = Like.objects.all()
     serializer_class = LikeSerializer
     permission_classes = [IsAuthenticated]
 
-    def create(self, request, *args, **kwargs):
-        photo_id = kwargs.get("photo_id")
-        user = request.user
+    def perform_create(self, serializer):
+        """Ensure the like is linked to the user"""
+        serializer.save(user=self.request.user)
 
-        if Like.objects.filter(user=user, photo_id=photo_id).exists():
-            return Response({"detail": "You already liked this photo."}, status=status.HTTP_400_BAD_REQUEST)
+    def get_queryset(self):
+        """Users can only see their own likes"""
+        return Like.objects.filter(user=self.request.user)
 
-
-        serializer = self.get_serializer(data={"user": user.id, "photo": photo_id})
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-class UnlikePhotoView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def delete(self, request, photo_id):
-        user = request.user
-
-        if not Like.objects.filter(user=user, photo_id=photo_id).exists():
-            return Response({"detail": "You haven't liked this photo yet."}, status=status.HTTP_400_BAD_REQUEST)
-
-        Like.objects.filter(user=user, photo_id=photo_id).delete()
-        return Response({"detail": "Like removed successfully."}, status=status.HTTP_204_NO_CONTENT)
+    @action(detail=True, methods=["delete"])
+    def unlike(self, request, pk=None):
+        """Allow users to unlike"""
+        like = get_object_or_404(Like, id=pk, user=request.user)
+        like.delete()
+        return Response({"detail": "Unliked successfully."}, status=status.HTTP_204_NO_CONTENT)

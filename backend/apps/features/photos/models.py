@@ -22,6 +22,7 @@ class Photo(models.Model):
     comments_count = models.IntegerField(default=0)
     downloads_count = models.IntegerField(default=0)
 
+
     class Meta:
         db_table = "photos"
 

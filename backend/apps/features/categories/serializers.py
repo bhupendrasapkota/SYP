@@ -7,7 +7,7 @@ class CategorySerializer(serializers.ModelSerializer):
         fields = ["id", "name", "image"]
         read_only_fields = ["id"]
 
-class photo_categorySerializer(serializers.ModelSerializer):
+class PhotoCategorySerializer(serializers.ModelSerializer):
     class Meta:
         model = photo_category
         fields = "__all__"

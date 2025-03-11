@@ -1,8 +1,12 @@
-from django.urls import path
-from .views import AddCommentView, UpdateCommentView, DeleteCommentView
+from django.urls import path, include
+from rest_framework.routers import DefaultRouter
+from .views import CommentViewSet
+
+app_name = "comments"
+
+router = DefaultRouter()
+router.register(r'', CommentViewSet, basename='comments')
 
 urlpatterns = [
-    path("photos/<uuid:photo_id>/comments/add/", AddCommentView.as_view(), name="add_comment"),
-    path("comments/<uuid:pk>/edit/", UpdateCommentView.as_view(), name="edit_comment"),
-    path("comments/<uuid:pk>/delete/", DeleteCommentView.as_view(), name="delete_comment"),
+    path("", include(router.urls)),
 ]

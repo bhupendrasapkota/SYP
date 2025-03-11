@@ -1,11 +1,12 @@
-from django.urls import path
-from .views import PhotoUploadView, PhotoListView, TrendingPhotosView, RetrievePhotoView, PhotoDeleteView
+from django.urls import path, include
+from rest_framework.routers import DefaultRouter
+from .views import PhotoViewSet
+
+app_name = "photos"
+
+router = DefaultRouter()
+router.register(r'', PhotoViewSet, basename='photos')
 
 urlpatterns = [
-    path("upload/", PhotoUploadView.as_view(), name="photo-upload"),
-    path("", PhotoListView.as_view(), name="photo-list"),
-    path("trending/", TrendingPhotosView.as_view(), name="trending-photos"),
-    path("<uuid:pk>/", RetrievePhotoView.as_view(), name="photo-detail"),
-    path("<uuid:pk>/delete/", PhotoDeleteView.as_view(), name="photo-delete"),
-
+    path("", include(router.urls)),
 ]

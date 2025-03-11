@@ -1,39 +1,36 @@
-from rest_framework import generics, status
-from rest_framework.response import Response
+from rest_framework import viewsets
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.exceptions import PermissionDenied
 from django.shortcuts import get_object_or_404
 from .models import Comment
 from .serializers import CommentSerializer
 
-class AddCommentView(generics.CreateAPIView):
+class CommentViewSet(viewsets.ModelViewSet):
+    """Handles CRUD operations for comments"""
+    queryset = Comment.objects.all()
     serializer_class = CommentSerializer
     permission_classes = [IsAuthenticated]
 
     def perform_create(self, serializer):
-        user = self.request.user
-        photo_id = self.kwargs["photo_id"]
+        """Ensure the comment is linked to the user"""
+        serializer.save(user=self.request.user)
 
-        if Comment.objects.filter(user=user, photo_id=photo_id, comment_text=self.request.data.get("comment_text")).exists():
-            raise serializer.ValidationError("You already posted this comment.")
-        
-        serializer.save(user=user, photo_id=photo_id)
+    def get_queryset(self):
+        """Allow users to only view their own comments"""
+        if self.request.user.is_staff:
+            return Comment.objects.all()
+        return Comment.objects.filter(user=self.request.user)
 
-class UpdateCommentView(generics.UpdateAPIView):
-    serializer_class = CommentSerializer
-    permission_classes = [IsAuthenticated]
-
-    def get_object(self):
-        obj = get_object_or_404(Comment, id=self.kwargs["pk"])
-        if obj.user != self.request.user:
+    def update(self, request, *args, **kwargs):
+        """Restrict editing to comment owner"""
+        comment = self.get_object()
+        if comment.user != request.user:
             raise PermissionDenied("You can only edit your own comments.")
-        return obj
+        return super().update(request, *args, **kwargs)
 
-class DeleteCommentView(generics.DestroyAPIView):
-    permission_classes = [IsAuthenticated]
-
-    def get_object(self):
-        obj = get_object_or_404(Comment, id=self.kwargs["pk"])
-        if obj.user != self.request.user:
+    def destroy(self, request, *args, **kwargs):
+        """Restrict deletion to comment owner"""
+        comment = self.get_object()
+        if comment.user != request.user:
             raise PermissionDenied("You can only delete your own comments.")
-        return obj
+        return super().destroy(request, *args, **kwargs)

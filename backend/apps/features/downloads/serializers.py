@@ -8,7 +8,7 @@ class PhotoSerializer(serializers.ModelSerializer):
         fields = ["id", "image", "title"]
 
 class DownloadSerializer(serializers.ModelSerializer):
-    photo = PhotoSerializer(read_only=True)
+    photo = serializers.PrimaryKeyRelatedField(queryset=Photo.objects.all())
 
     class Meta:
         model = Download
