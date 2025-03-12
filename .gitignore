@@ -1,3 +1,26 @@
+# Ignore the  environment folder
 .env
-requirements.txt
-env/
+
+
+# Ignore the node_modules folder
+node_modules/
+
+# Ignore the media files folder
+public/images/
+
+# Ignore the dist folder
+dist/
+
+# Ignore the build files folder
+build/
+
+# Ignore the Vite cache folder
+.vite/
+
+# Ignore the Ds_Store file
+.DS_Store
+
+# Ignore the Thumbs.db file
+Thumbs.db
+
+Requirements/
