@@ -57,6 +57,57 @@ class CollectionViewSet(viewsets.ModelViewSet):
         
         return base_qs
 
+    @action(detail=False, methods=['get'])
+    def user_collections(self, request):
+        """Get collections for a specific user."""
+        try:
+            username = request.query_params.get('username')
+            if not username:
+                logger.error("Username parameter missing in user_collections request")
+                raise ValidationError("username parameter is required")
+
+            try:
+                user = User.objects.get(username=username)
+            except User.DoesNotExist:
+                logger.error(f"User not found: {username}")
+                return Response(
+                    {"error": "User not found"},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+            
+            # Check cache first
+            cache_key = f"user_collections_{user.id}"
+            cached_collections = cache.get(cache_key)
+            if cached_collections:
+                logger.debug(f"Returning cached collections for user: {username}")
+                return Response(cached_collections)
+
+            # Get collections - show all collections for the user
+            collections = Collection.objects.filter(user=user).select_related('user')
+
+            # Serialize collections
+            serializer = self.get_serializer(collections, many=True)
+            data = serializer.data
+
+            # Log the response data
+            logger.debug(f"Returning collections for user {username}: {data}")
+
+            # Cache the results
+            cache.set(cache_key, data, self.CACHE_TIMEOUT)
+            logger.debug(f"Cached {len(data)} collections for user: {username}")
+
+            return Response(data)
+
+        except ValidationError as e:
+            logger.error(f"Validation error in user_collections: {str(e)}")
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            logger.error(f"Failed to fetch user collections: {str(e)}")
+            return Response(
+                {"error": "Failed to fetch user collections"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
     def perform_create(self, serializer):
         """Create a new collection."""
         serializer.save(user=self.request.user)
@@ -404,33 +455,6 @@ class CollectionViewSet(viewsets.ModelViewSet):
             logger.error(f"Failed to fetch trending collections: {str(e)}")
             return Response(
                 {"error": "Failed to fetch trending collections"},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-
-    @action(detail=False, methods=['get'])
-    def user_collections(self, request):
-        """Get collections for a specific user."""
-        try:
-            user_id = request.query_params.get('user_id', request.user.id)
-            cache_key = f"user_collections_{user_id}"
-            cached_collections = cache.get(cache_key)
-
-            if cached_collections:
-                return Response(cached_collections)
-
-            collections = Collection.objects.filter(user_id=user_id)
-            if user_id != str(request.user.id) and not request.user.is_staff:
-                collections = collections.filter(is_public=True)
-
-            serializer = self.get_serializer(collections, many=True)
-            cache.set(cache_key, serializer.data, timeout=self.CACHE_TIMEOUT)
-            
-            return Response(serializer.data)
-
-        except Exception as e:
-            logger.error(f"Failed to fetch user collections: {str(e)}")
-            return Response(
-                {"error": "Failed to fetch user collections"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 

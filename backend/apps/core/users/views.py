@@ -6,14 +6,25 @@ from apps.core.users.models import User
 from .serializers import ProfileSerializer
 from cloudinary.uploader import upload
 from .security import validate_image
+from django.shortcuts import get_object_or_404
+import cloudinary
+from PIL import Image
+import io
 
 class ProfileView(APIView):
     """Handles retrieving and updating user profile."""
     permission_classes = [IsAuthenticated]
 
-    def get(self, request):
-        """Retrieve the logged-in user's profile."""
-        serializer = ProfileSerializer(request.user)
+    def get(self, request, id=None):
+        """Retrieve user profile."""
+        if id:
+            # Get specific user profile
+            user = get_object_or_404(User, id=id)
+        else:
+            # Get current user profile
+            user = request.user
+            
+        serializer = ProfileSerializer(user)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
     def patch(self, request):

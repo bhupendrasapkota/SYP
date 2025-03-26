@@ -137,8 +137,8 @@ REST_FRAMEWORK = {
         "rest_framework.throttling.AnonRateThrottle",
     ),
     "DEFAULT_THROTTLE_RATES": {
-        "user": "100/day",
-        "anon": "10/minute",
+        "user": "1000/minute",
+        "anon": "100/minute",
     },
     "EXCEPTION_HANDLER": "config.error_handlers.custom_exception_handler",
 }

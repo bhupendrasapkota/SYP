@@ -9,4 +9,4 @@ class PhotoSerializer(serializers.ModelSerializer):
     ai_tags = serializers.ListField(child=serializers.CharField(), read_only=True)
     class Meta:
         model = Photo
-        fields = ["username","image", "title", "description", "width", "height", "upload_date", "likes_count", "comments_count","ai_tags"]
+        fields = ["id", "username", "image", "title", "description", "width", "height", "upload_date", "likes_count", "comments_count", "downloads_count", "ai_tags"]

@@ -28,6 +28,7 @@ class DownloadViewSet(viewsets.ModelViewSet):
     - Check download status
     - Get most downloaded photos
     - Manage download limits
+    - Remove downloads
     """
     serializer_class = DownloadSerializer
     permission_classes = [IsAuthenticated]
@@ -38,7 +39,7 @@ class DownloadViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         """Get downloads queryset with optimized loading."""
-        return Download.objects.select_related('user', 'photo')
+        return Download.objects.select_related('user', 'photo').filter(user=self.request.user)
 
     @action(detail=False, methods=['post'])
     def track_download(self, request):
@@ -126,10 +127,7 @@ class DownloadViewSet(viewsets.ModelViewSet):
             if cached_downloads:
                 return Response(cached_downloads)
 
-            downloads = Download.objects.select_related('photo').filter(
-                user_id=user_id
-            ).order_by('-downloaded_at')
-
+            downloads = self.get_queryset().order_by('-downloaded_at')
             serializer = self.get_serializer(downloads, many=True)
             cache.set(cache_key, serializer.data, timeout=300)  # Cache for 5 minutes
             
@@ -157,25 +155,20 @@ class DownloadViewSet(viewsets.ModelViewSet):
             this_month = timezone.now().replace(day=1)
 
             stats = {
-                "total_downloads": Download.objects.filter(user_id=user_id).count(),
-                "today_downloads": Download.objects.filter(
-                    user_id=user_id,
+                "total_downloads": self.get_queryset().count(),
+                "today_downloads": self.get_queryset().filter(
                     downloaded_at__date=today
                 ).count(),
-                "month_downloads": Download.objects.filter(
-                    user_id=user_id,
+                "month_downloads": self.get_queryset().filter(
                     downloaded_at__gte=this_month
                 ).count(),
-                "recent_downloads": Download.objects.select_related('photo')
-                    .filter(user_id=user_id)
+                "recent_downloads": self.get_queryset()
                     .order_by('-downloaded_at')[:5]
                     .values('photo__title', 'downloaded_at'),
-                "remaining_daily_limit": self.DAILY_DOWNLOAD_LIMIT - Download.objects.filter(
-                    user_id=user_id,
+                "remaining_daily_limit": self.DAILY_DOWNLOAD_LIMIT - self.get_queryset().filter(
                     downloaded_at__date=today
                 ).count(),
-                "remaining_monthly_limit": self.MONTHLY_DOWNLOAD_LIMIT - Download.objects.filter(
-                    user_id=user_id,
+                "remaining_monthly_limit": self.MONTHLY_DOWNLOAD_LIMIT - self.get_queryset().filter(
                     downloaded_at__gte=this_month
                 ).count()
             }
@@ -235,13 +228,11 @@ class DownloadViewSet(viewsets.ModelViewSet):
             today = timezone.now().date()
             this_month = timezone.now().replace(day=1)
 
-            daily_downloads = Download.objects.filter(
-                user=request.user,
+            daily_downloads = self.get_queryset().filter(
                 downloaded_at__date=today
             ).count()
 
-            monthly_downloads = Download.objects.filter(
-                user=request.user,
+            monthly_downloads = self.get_queryset().filter(
                 downloaded_at__gte=this_month
             ).count()
 
@@ -266,6 +257,47 @@ class DownloadViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
+    @action(detail=False, methods=['delete'])
+    def remove_by_photo(self, request):
+        """Remove a download by photo ID."""
+        try:
+            photo_id = request.query_params.get('photo_id')
+            if not photo_id:
+                raise ValidationError("photo_id is required")
+
+            # Get the download for this photo and user
+            download = get_object_or_404(
+                Download.objects.select_related('photo'),
+                photo_id=photo_id,
+                user=request.user
+            )
+            
+            # Delete the download
+            download.delete()
+            
+            # Clear relevant caches
+            cache_keys = [
+                f"user_downloads_{request.user.id}",
+                f"download_stats_{request.user.id}",
+                f"photo_downloads_{photo_id}",
+                "most_downloaded_photos"
+            ]
+            cache.delete_many(cache_keys)
+            
+            return Response(
+                {"message": "Download removed successfully"},
+                status=status.HTTP_204_NO_CONTENT
+            )
+            
+        except ValidationError as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            logger.error(f"Failed to remove download: {str(e)}")
+            return Response(
+                {"error": "Failed to remove download"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
     def create(self, request, *args, **kwargs):
         """Disable direct POST method - use track_download instead."""
         return Response(
@@ -281,8 +313,8 @@ class DownloadViewSet(viewsets.ModelViewSet):
         )
 
     def destroy(self, request, *args, **kwargs):
-        """Disable DELETE method."""
+        """Disable DELETE method - use remove_by_photo instead."""
         return Response(
-            {"error": "Method not allowed"},
+            {"error": "Use /api/downloads/remove_by_photo/ endpoint to remove downloads"},
             status=status.HTTP_405_METHOD_NOT_ALLOWED
         )

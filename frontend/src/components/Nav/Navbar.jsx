@@ -1,7 +1,7 @@
 // Navbar.jsx
 import { Link } from "react-router-dom";
-import UserSection from "./components/UserSection";
-import SearchIcon from "./components/Search/SearchIcon";
+import UserSection from "../Screen/Profile/UserSection";
+import SearchIcon from "../Screen/Ui/SearchIcon";
 
 const Navbar = () => {
   const navLinks = [

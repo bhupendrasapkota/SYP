@@ -1,178 +1,277 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Modal from "react-modal";
-import {
-  FaImage,
-  FaTimes,
-  FaUpload,
-  FaTags,
-  FaHeart,
-  FaComment,
-  FaDownload,
-} from "react-icons/fa";
+import { FaTimes } from "react-icons/fa";
+import photosManager from "../../../api/features/photos/manage";
+import { useAuth } from "../../../context/AuthContext";
+import { useLoading } from "../../../context/LoadingContext";
+import { useUIState } from "../../../context/UIStateContext";
+import { useDataSync } from "../../../context/DataSyncContext";
+import { useNavigate } from 'react-router-dom';
+import AllPosts from './Items/AllPosts';
+import MostDownloadedPosts from './Items/MostDownloadedPosts';
+import PhotoDetailScreen from '../../Screen/Photo/PhotoDetailScreen';
 
-Modal.setAppElement("#root");
+// Modal styles configuration
+const modalStyles = {
+  overlay: {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 49,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)'
+  },
+  content: {
+    position: 'relative',
+    background: '#ffffff',
+    border: 'none',
+    padding: 0,
+    width: '100%',
+    maxWidth: '800px',
+    maxHeight: '90vh',
+    margin: 'auto',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 50
+  }
+};
+
+// Initialize Modal
+Modal.setAppElement('#root');
 
 const Post = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedImage, setSelectedImage] = useState(null);
-  const [previewUrl, setPreviewUrl] = useState(null);
-  const [formData, setFormData] = useState({
-    title: "",
-    description: "",
-    ai_tags: [],
-  });
+  const [title, setTitle] = useState("");
+  const [tags, setTags] = useState("");
+  const [currentFilter, setCurrentFilter] = useState("all");
+  const [selectedPost, setSelectedPost] = useState(null);
+  const [posts, setPosts] = useState([]);
+  const [hasMore, setHasMore] = useState(true);
+  const [page, setPage] = useState(1);
+  
+  const { user } = useAuth();
+  const { showLoading, hideLoading } = useLoading();
+  const { updatePostsList, removePost } = useDataSync();
+  const { showNotification } = useUIState();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const fetchPosts = async () => {
+      if (!user) {
+        showNotification('Please login to view your posts', 'info');
+        navigate('/login');
+        return;
+      }
+
+      if (currentFilter === 'downloads') return;
+
+      try {
+        showLoading();
+        const result = await photoManager.getUserGallery(user.id, page, 10);
+        if (result) {
+          setPosts(prev => page === 1 ? result : [...prev, ...result]);
+          setHasMore(result.length === 10);
+        }
+      } catch (error) {
+        showNotification(error.response?.data?.error || 'Failed to load posts. Please try again.', 'error');
+      } finally {
+        hideLoading();
+      }
+    };
+
+    fetchPosts();
+  }, [currentFilter, page, showLoading, hideLoading, showNotification, user, navigate]);
 
   const handleImageChange = (e) => {
     const file = e.target.files[0];
-    if (file) {
-      setSelectedImage(file);
-      setPreviewUrl(URL.createObjectURL(file));
+    if (file && file.size > 5 * 1024 * 1024) {
+      showNotification("Image size should be less than 5MB", "error");
+      return;
     }
+    setSelectedImage(file);
   };
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
+    if (name === "title") setTitle(value);
+    if (name === "tags") setTags(value);
   };
 
   const handleCloseModal = () => {
     setIsModalOpen(false);
     setSelectedImage(null);
-    setPreviewUrl(null);
-    setFormData({
-      title: "",
-      description: "",
-      ai_tags: [],
-    });
+    setTitle("");
+    setTags("");
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    // This will be connected to the backend API
-    console.log("Form data:", { ...formData, image: selectedImage });
-    handleCloseModal();
+    if (!selectedImage) {
+      showNotification("Please select an image", "error");
+      return;
+    }
+
+    try {
+      showLoading();
+      const formData = new FormData();
+      formData.append("photo", selectedImage);
+      formData.append("title", title);
+      formData.append("tags", tags);
+
+      const response = await photoManager.uploadPhoto(formData);
+      updatePostsList(response.data);
+      showNotification("Photo uploaded successfully!", "success");
+      handleCloseModal();
+    } catch (error) {
+      showNotification(error.message || "Failed to upload photo", "error");
+    } finally {
+      hideLoading();
+    }
   };
 
-  // Sample posts matching backend model
-  const samplePosts = [
-    {
-      id: "uuid-1",
-      user: {
-        id: "user-uuid",
-        username: "johndoe",
-      },
-      image: "https://source.unsplash.com/random/800x600?nature",
-      title: "Morning Mist",
-      description: "Captured this beautiful morning scene",
-      width: 800,
-      height: 600,
-      format: "jpg",
-      ai_tags: ["nature", "landscape", "morning", "mist"],
-      upload_date: "2024-03-12T08:00:00Z",
-      likes_count: 42,
-      comments_count: 5,
-      downloads_count: 12,
-    },
-  ];
+  const handleFilterChange = (filter) => {
+    setCurrentFilter(filter);
+    setPage(1);
+    setPosts([]);
+    setHasMore(true);
+  };
+
+  const handlePostDeleted = (postId) => {
+    removePost(postId);
+    setPosts(prev => prev.filter(p => p.id !== postId));
+  };
+
+  const handlePhotoClick = (post) => {
+    setSelectedPost(post);
+  };
+
+  const handleClosePhotoDetail = () => {
+    setSelectedPost(null);
+  };
+
+  const handleLoadMore = () => {
+    if (!hasMore) return;
+    setPage(prev => prev + 1);
+  };
 
   return (
     <div className="w-full bg-white px-2 py-4">
       <div className="flex justify-between items-center mb-4">
-        <h2 className="text-xl font-bold">Posts</h2>
-        <button
-          onClick={() => setIsModalOpen(true)}
-          className="px-4 py-2 border-2 border-black hover:bg-black hover:text-white transition-all duration-300"
-        >
-          Create Post
-        </button>
+        <h2 className="text-xl font-bold">My Posts</h2>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => handleFilterChange('all')}
+            className={`px-3 py-1 border-2 border-black transition-all duration-300 ${
+              currentFilter === 'all' 
+                ? 'bg-black text-white' 
+                : 'hover:bg-black hover:text-white'
+            }`}
+          >
+            All Posts
+          </button>
+          <button
+            onClick={() => handleFilterChange('downloads')}
+            className={`px-3 py-1 border-2 border-black transition-all duration-300 ${
+              currentFilter === 'downloads' 
+                ? 'bg-black text-white' 
+                : 'hover:bg-black hover:text-white'
+            }`}
+          >
+            Most Downloaded
+          </button>
+          {user && (
+            <button
+              onClick={() => setIsModalOpen(true)}
+              className="px-3 py-1 border-2 border-black hover:bg-black hover:text-white transition-all duration-300"
+            >
+              Create Post
+            </button>
+          )}
+        </div>
       </div>
 
       <Modal
         isOpen={isModalOpen}
         onRequestClose={handleCloseModal}
-        className="fixed inset-0 flex items-center justify-center p-2"
-        overlayClassName="fixed inset-0 bg-black bg-opacity-50"
+        className="fixed inset-0 flex items-center justify-center p-4 z-[50]"
+        overlayClassName="fixed inset-0 bg-black bg-opacity-50 z-[49]"
+        style={modalStyles}
       >
-        <div className="bg-white w-full max-w-2xl border-2 border-black">
-          <div className="flex justify-between items-center p-4 border-b-2 border-black">
-            <h2 className="text-xl font-bold">Create New Post</h2>
+        <div className="w-full bg-white border-2 border-black overflow-y-scroll no-scrollbar">
+          <div className="flex justify-between items-center p-4 border-b-2 border-black sticky z-10 top-0 bg-white">
+            <h2 className="text-xl font-bold text-black">Create New Post</h2>
             <button
               onClick={handleCloseModal}
               className="p-2 hover:text-gray-600"
+              aria-label="Close modal"
             >
-              <FaTimes className="w-5 h-5" />
+              <FaTimes className="w-5 h-5 text-black" />
             </button>
           </div>
 
           <form onSubmit={handleSubmit} className="p-4">
-            <div className="mb-4">
-              <label className="block mb-2 font-bold">
-                Image
-                <div className="mt-1 border-2 border-black p-4 flex flex-col items-center justify-center cursor-pointer">
-                  {previewUrl ? (
-                    <img
-                      src={previewUrl}
-                      alt="Preview"
-                      className="max-h-64 w-auto object-contain"
+            <div className="space-y-4">
+              <div>
+                <label className="block mb-2 font-bold text-black">
+                  Image
+                  <div className="mt-1 border-2 border-black p-4 flex flex-col items-center justify-center cursor-pointer">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleImageChange}
+                      className="hidden"
+                      required
                     />
-                  ) : (
-                    <>
-                      <FaImage className="w-8 h-8 mb-2" />
-                      <p>Click or drag to upload image</p>
-                    </>
-                  )}
+                  </div>
+                </label>
+              </div>
+
+              <div>
+                <label className="block mb-2 font-bold text-black">
+                  Title
                   <input
-                    type="file"
-                    accept="image/*"
-                    onChange={handleImageChange}
-                    className="hidden"
+                    type="text"
+                    name="title"
+                    value={title}
+                    onChange={handleInputChange}
+                    className="w-full mt-1 px-3 py-2 border-2 border-black focus:outline-none text-black placeholder-gray-500"
                     required
                   />
-                </div>
-              </label>
+                </label>
+              </div>
+
+              <div>
+                <label className="block mb-2 font-bold text-black">
+                  Tags
+                  <input
+                    type="text"
+                    name="tags"
+                    value={tags}
+                    onChange={handleInputChange}
+                    className="w-full mt-1 px-3 py-2 border-2 border-black focus:outline-none text-black placeholder-gray-500"
+                    required
+                  />
+                </label>
+              </div>
             </div>
 
-            <div className="mb-4">
-              <label className="block mb-2 font-bold">
-                Title
-                <input
-                  type="text"
-                  name="title"
-                  value={formData.title}
-                  onChange={handleInputChange}
-                  className="w-full mt-1 px-3 py-2 border-2 border-black focus:outline-none"
-                  required
-                />
-              </label>
-            </div>
-
-            <div className="mb-4">
-              <label className="block mb-2 font-bold">
-                Description
-                <textarea
-                  name="description"
-                  value={formData.description}
-                  onChange={handleInputChange}
-                  className="w-full mt-1 px-3 py-2 border-2 border-black focus:outline-none resize-none h-32"
-                  required
-                />
-              </label>
-            </div>
-
-            <div className="flex justify-end gap-2">
+            <div className="mt-8 flex flex-col sm:flex-row justify-end gap-2">
               <button
                 type="button"
                 onClick={handleCloseModal}
-                className="px-4 py-2 border-2 border-black hover:bg-black hover:text-white transition-all duration-300"
+                className="w-full sm:w-auto px-4 py-2 border-2 border-black text-black hover:bg-black hover:text-white transition-all duration-300"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                className="px-4 py-2 bg-black text-white border-2 border-black hover:bg-white hover:text-black transition-all duration-300"
+                className="w-full sm:w-auto px-4 py-2 bg-black text-white border-2 border-black hover:bg-white hover:text-black transition-all duration-300"
               >
                 Create Post
               </button>
@@ -181,45 +280,37 @@ const Post = () => {
         </div>
       </Modal>
 
-      {/* Posts Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {samplePosts.map((post) => (
-          <div key={post.id} className="border-2 border-black">
-            <img
-              src={post.image}
-              alt={post.title}
-              className="w-full h-64 object-cover"
-            />
-            <div className="p-4">
-              <h3 className="font-bold mb-2">{post.title}</h3>
-              <p className="text-gray-600 mb-4">{post.description}</p>
-              <div className="flex items-center justify-between text-sm text-gray-600">
-                <div className="flex gap-4">
-                  <span className="flex items-center gap-1">
-                    <FaHeart /> {post.likes_count}
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <FaComment /> {post.comments_count}
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <FaDownload /> {post.downloads_count}
-                  </span>
-                </div>
-                <span>{new Date(post.upload_date).toLocaleDateString()}</span>
-              </div>
-              {post.ai_tags.length > 0 && (
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {post.ai_tags.map((tag, index) => (
-                    <span key={index} className="text-xs text-gray-600">
-                      #{tag}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        ))}
-      </div>
+      {selectedPost && (
+        <PhotoDetailScreen
+          photo={selectedPost}
+          onClose={handleClosePhotoDetail}
+          onPhotoAction={(type, id) => {
+            if (type === 'delete') {
+              handlePostDeleted(id);
+            }
+          }}
+        />
+      )}
+
+      {currentFilter === 'all' ? (
+        <AllPosts 
+          posts={posts} 
+          user={user} 
+          onPostDeleted={handlePostDeleted}
+          onPhotoClick={handlePhotoClick}
+          hasMore={hasMore}
+          onLoadMore={handleLoadMore}
+        />
+      ) : currentFilter === 'downloads' ? (
+        <MostDownloadedPosts 
+          posts={posts} 
+          user={user} 
+          onPostDeleted={handlePostDeleted}
+          onPhotoClick={handlePhotoClick}
+          hasMore={hasMore}
+          onLoadMore={handleLoadMore}
+        />
+      ) : null}
     </div>
   );
 };

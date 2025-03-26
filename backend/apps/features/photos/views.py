@@ -317,22 +317,52 @@ class PhotoViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'])
     def user_gallery(self, request):
         """Get photos for a specific user with pagination."""
-        username = request.query_params.get('username')
-        if not username:
+        try:
+            user_id = request.query_params.get('user_id')
+            if not user_id:
+                return Response(
+                    {"error": "User ID parameter is required"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Check if user exists
+            from apps.core.users.models import User
+            if not User.objects.filter(id=user_id).exists():
+                return Response(
+                    {"error": f"User with ID '{user_id}' not found"},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+
+            # Get base queryset
+            queryset = self.get_queryset().filter(user_id=user_id)
+            
+            # Apply ordering if specified
+            ordering = request.query_params.get('ordering')
+            if ordering:
+                if ordering.lstrip('-') in self.ordering_fields:
+                    queryset = queryset.order_by(ordering)
+                else:
+                    return Response(
+                        {"error": f"Invalid ordering field. Must be one of: {', '.join(self.ordering_fields)}"},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+            
+            # Apply pagination
+            page = self.paginate_queryset(queryset)
+            
+            if page is not None:
+                serializer = self.get_serializer(page, many=True)
+                return self.get_paginated_response(serializer.data)
+
+            serializer = self.get_serializer(queryset, many=True)
+            return Response(serializer.data)
+            
+        except Exception as e:
+            logger.error(f"Error in user_gallery: {str(e)}")
             return Response(
-                {"error": "Username parameter is required"},
-                status=status.HTTP_400_BAD_REQUEST
+                {"error": "Failed to fetch user gallery"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-
-        queryset = self.get_queryset().filter(user__username=username)
-        page = self.paginate_queryset(queryset)
-        
-        if page is not None:
-            serializer = self.get_serializer(page, many=True)
-            return self.get_paginated_response(serializer.data)
-
-        serializer = self.get_serializer(queryset, many=True)
-        return Response(serializer.data)
 
     @action(detail=True, methods=['post'])
     def like(self, request, pk=None):

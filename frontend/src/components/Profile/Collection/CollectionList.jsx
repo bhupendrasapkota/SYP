@@ -1,45 +1,89 @@
-import React from "react";
-import CollectionItem from "./CollectionItem";
+import React, { useEffect, useState, useCallback, memo } from 'react';
+import PropTypes from 'prop-types';
+import { CollectionsManager } from '../../../api/features/collection/manage';
+import CollectionSlider from './CollectionSlider';
+import LoadingOverlay from '../../Screen/Common/LoadingOverlay';
+import { useLoading } from '../../../context/LoadingContext';
+import { useUIState } from '../../../context/UIStateContext';
 
-const CollectionList = () => {
-  // Static data for UI demonstration
-  const collections = [
-    {
-      id: "1",
-      name: "Nature Photography",
-      description: "A collection of beautiful nature photos.",
-      likes_count: 120,
-      followers_count: 80,
-      slug: "nature-photography",
-    },
-    {
-      id: "2",
-      name: "Urban Exploration",
-      description: "Exploring the hidden gems of the city.",
-      likes_count: 95,
-      followers_count: 60,
-      slug: "urban-exploration",
-    },
-    {
-      id: "3",
-      name: "Portraits",
-      description: "Capturing the essence of people.",
-      likes_count: 150,
-      followers_count: 100,
-      slug: "portraits",
-    },
-  ];
+const CollectionList = memo(({ userId, username, isModalOpen }) => {
+  const [collections, setCollections] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const { showLoading, hideLoading } = useLoading();
+  const { showNotification } = useUIState();
+  const collectionsManager = new CollectionsManager();
+
+  const fetchCollections = useCallback(async () => {
+    if (!userId) {
+      setError('User ID is required');
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      showLoading();
+      setError(null);
+
+      const response = await collectionsManager.getUserCollections(userId);
+      const data = response?.data || [];
+      
+      setCollections(Array.isArray(data) ? data : []);
+    } catch (err) {
+      const errorMessage = err.response?.status === 404 ? 'No collections found' :
+                          err.response?.status === 403 ? 'Access denied' :
+                          'Failed to fetch collections. Please try again later.';
+      
+      setError(errorMessage);
+      showNotification(errorMessage, 'error');
+      setCollections([]);
+      console.error('Error fetching collections:', err);
+    } finally {
+      hideLoading();
+      setIsLoading(false);
+    }
+  }, [userId, showLoading, hideLoading, showNotification]);
+
+  useEffect(() => {
+    fetchCollections();
+  }, [fetchCollections]);
+
+  if (isLoading) return <LoadingOverlay />;
+  
+  if (error) {
+    return (
+      <div className="text-center py-8 text-black border-2 border-black p-4" role="alert">
+        {error}
+      </div>
+    );
+  }
+
+  if (!collections.length) {
+    return (
+      <div className="text-center py-8 text-gray-500" role="status">
+        No collections found
+      </div>
+    );
+  }
 
   return (
-    <div className="p-4">
-      <h2 className="text-2xl font-bold mb-4">My Collections</h2>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {collections.map((collection) => (
-          <CollectionItem key={collection.id} collection={collection} />
-        ))}
-      </div>
+    <div className="w-full">
+      <CollectionSlider 
+        collections={collections} 
+        title={`${username}'s Collections`}
+        isModalOpen={isModalOpen}
+        onCollectionUpdate={fetchCollections}
+      />
     </div>
   );
+});
+
+CollectionList.propTypes = {
+  userId: PropTypes.number.isRequired,
+  username: PropTypes.string.isRequired,
+  isModalOpen: PropTypes.bool
 };
+
+CollectionList.displayName = 'CollectionList';
 
 export default CollectionList;

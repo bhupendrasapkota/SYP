@@ -38,18 +38,18 @@ class FollowerViewSet(viewsets.ModelViewSet):
     def toggle_follow(self, request):
         """
         Toggle follow status for a user.
-        Requires user_id in request data.
+        Requires username in request data.
         """
         try:
-            user_to_follow_id = request.data.get('user_id')
-            if not user_to_follow_id:
-                raise ValidationError("user_id is required")
+            username = request.data.get('username')
+            if not username:
+                raise ValidationError("username is required")
 
+            user_to_follow = get_object_or_404(User, username=username)
+            
             # Prevent self-following
-            if str(user_to_follow_id) == str(request.user.id):
+            if user_to_follow.id == request.user.id:
                 raise ValidationError("You cannot follow yourself")
-
-            user_to_follow = get_object_or_404(User, id=user_to_follow_id)
             
             with transaction.atomic():
                 follow_relation, created = Follower.objects.get_or_create(
@@ -93,15 +93,19 @@ class FollowerViewSet(viewsets.ModelViewSet):
     def followers(self, request):
         """Get list of user's followers with caching."""
         try:
-            user_id = request.query_params.get('user_id', request.user.id)
-            cache_key = f"user_followers_{user_id}"
+            username = request.query_params.get('username')
+            if not username:
+                raise ValidationError("username query parameter is required")
+
+            user = get_object_or_404(User, username=username)
+            cache_key = f"user_followers_{user.id}"
             cached_followers = cache.get(cache_key)
 
             if cached_followers:
                 return Response(cached_followers)
 
             followers = Follower.objects.select_related('follower').filter(
-                following_id=user_id
+                following=user
             ).order_by('-followed_at')
 
             serializer = self.get_serializer(followers, many=True)
@@ -109,6 +113,8 @@ class FollowerViewSet(viewsets.ModelViewSet):
             
             return Response(serializer.data)
 
+        except ValidationError as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
             logger.error(f"Failed to fetch followers: {str(e)}")
             return Response(
@@ -120,15 +126,19 @@ class FollowerViewSet(viewsets.ModelViewSet):
     def following(self, request):
         """Get list of users the current user is following."""
         try:
-            user_id = request.query_params.get('user_id', request.user.id)
-            cache_key = f"user_following_{user_id}"
+            username = request.query_params.get('username')
+            if not username:
+                raise ValidationError("username query parameter is required")
+
+            user = get_object_or_404(User, username=username)
+            cache_key = f"user_following_{user.id}"
             cached_following = cache.get(cache_key)
 
             if cached_following:
                 return Response(cached_following)
 
             following = Follower.objects.select_related('following').filter(
-                follower_id=user_id
+                follower=user
             ).order_by('-followed_at')
 
             serializer = self.get_serializer(following, many=True)
@@ -136,6 +146,8 @@ class FollowerViewSet(viewsets.ModelViewSet):
             
             return Response(serializer.data)
 
+        except ValidationError as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
             logger.error(f"Failed to fetch following: {str(e)}")
             return Response(
@@ -147,18 +159,22 @@ class FollowerViewSet(viewsets.ModelViewSet):
     def stats(self, request):
         """Get follower statistics for a user."""
         try:
-            user_id = request.query_params.get('user_id', request.user.id)
-            cache_key = f"follower_stats_{user_id}"
+            username = request.query_params.get('username')
+            if not username:
+                raise ValidationError("username query parameter is required")
+
+            user = get_object_or_404(User, username=username)
+            cache_key = f"follower_stats_{user.id}"
             cached_stats = cache.get(cache_key)
 
             if cached_stats:
                 return Response(cached_stats)
 
             stats = {
-                "followers_count": Follower.objects.filter(following_id=user_id).count(),
-                "following_count": Follower.objects.filter(follower_id=user_id).count(),
+                "followers_count": Follower.objects.filter(following=user).count(),
+                "following_count": Follower.objects.filter(follower=user).count(),
                 "recent_followers": Follower.objects.select_related('follower')
-                    .filter(following_id=user_id)
+                    .filter(following=user)
                     .order_by('-followed_at')[:5]
                     .values('follower__username', 'followed_at')
             }
@@ -166,6 +182,8 @@ class FollowerViewSet(viewsets.ModelViewSet):
             cache.set(cache_key, stats, timeout=3600)  # Cache for 1 hour
             return Response(stats)
 
+        except ValidationError as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
             logger.error(f"Failed to get follower stats: {str(e)}")
             return Response(
@@ -177,11 +195,12 @@ class FollowerViewSet(viewsets.ModelViewSet):
     def check_follow(self, request):
         """Check if the current user follows a specific user."""
         try:
-            user_id = request.query_params.get('user_id')
-            if not user_id:
-                raise ValidationError("user_id query parameter is required")
+            username = request.query_params.get('username')
+            if not username:
+                raise ValidationError("username query parameter is required")
 
-            cache_key = f"follow_status_{request.user.id}_{user_id}"
+            user = get_object_or_404(User, username=username)
+            cache_key = f"follow_status_{request.user.id}_{user.id}"
             cached_status = cache.get(cache_key)
 
             if cached_status is not None:
@@ -189,7 +208,7 @@ class FollowerViewSet(viewsets.ModelViewSet):
 
             is_following = Follower.objects.filter(
                 follower=request.user,
-                following_id=user_id
+                following=user
             ).exists()
 
             cache.set(cache_key, is_following, timeout=3600)  # Cache for 1 hour
